@@ -89,6 +89,8 @@ class SimpleNet():
 
 	# прямой проход
 	def forward(self):
+		assert (len(self.layers[0]) == self.structure[0][0]), "количество входных параметров должно совпадать с количеством входных нейронов!"
+		
 		# скрытые слои
 		for idx, layer in enumerate(self.layers[1:], start=1):
 			cur_inp = self.calc_input(self.layers[idx-1], self.weights[idx-1], self.bias[idx-1])
