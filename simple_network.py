@@ -68,6 +68,9 @@ class SimpleNet():
 	def sigmoid(self, x):
 		return 1/(1+math.exp(-x))
 	
+	def tanh(self, x):
+		return (math.exp(2*x) - 1)/(math.exp(2*x) + 1)
+	
 
 	# считаем выход нейронов слоя	
 	def calc_output(self, enter, func="sigmoid"):
@@ -78,7 +81,10 @@ class SimpleNet():
 			for idx, i in enumerate(enter):
 				output[idx] = self.sigmoid(i)
 			return output
-
+		elif func == "tanh":
+			for idx, i in enumerate(enter):
+				output[idx] = self.tanh(i)
+			return output
 
 	# вектор ошибок
 	def calc_errors(self, output):
@@ -94,7 +100,7 @@ class SimpleNet():
 		# скрытые слои
 		for idx, layer in enumerate(self.layers[1:], start=1):
 			cur_inp = self.calc_input(self.layers[idx-1], self.weights[idx-1], self.bias[idx-1])
-			cur_out = self.calc_output(cur_inp)	
+			cur_out = self.calc_output(cur_inp, self.structure[idx][2])	
 			self.layers[idx] = cur_out
 
 		errors = self.calc_errors(self.layers[-1])
@@ -108,6 +114,8 @@ class SimpleNet():
 	def derivative(self, x, func="sigmoid"):
 		if func == "sigmoid":
 			return x*(1-x)
+		elif func == "tanh":
+			return 1 - x**2
 	
 	def transpose(self, matrix):
 		output = []
@@ -132,7 +140,7 @@ class SimpleNet():
 	def calc_output_deltas(self):
 		out_deltas = []
 		for idx, true in enumerate(self.out_true):
-			out_deltas.append((self.layers[-1][idx] - true)*self.derivative(self.layers[-1][idx]))
+			out_deltas.append((self.layers[-1][idx] - true)*self.derivative(self.layers[-1][idx], self.structure[-1][2]))
 		return out_deltas
 
 
@@ -142,7 +150,7 @@ class SimpleNet():
 		derivatives_current_layer = []
 		
 		for idx, neuron in enumerate(self.layers[layer_idx]):
-			derivatives_current_layer.append(self.derivative(neuron))
+			derivatives_current_layer.append(self.derivative(neuron, self.structure[layer_idx][2]))
 		
 		# умножаем дельты следующего слоя на веса от данного слоя к следующему
 		deltas_prev_mul_curr_weights = self.matrix_mul([self.deltas[-1]], self.weights[layer_idx]) # dpcw для краткости
@@ -196,11 +204,11 @@ class SimpleNet():
 ## test
 '''
 # данные из статьи Matt Mazur про backpropagation
-struct = ((2, 0.35), (2, 0.6), (2,)) # кол-во нейронов, величина смещения
+struct = ((2, 0.35, "tanh"), (2, 0.6, "tanh"), (2,0, "tanh")) # кол-во нейронов, величина смещения
 s = SimpleNet(struct)
 
 # временно для тестов вставить эти веса
-self.weights = [	 #1    #2    #3->h11  #1    #2   #3->h12
+s.weights = [	 #1    #2    #3->h11  #1    #2   #3->h12
 				   ((0.15, 0.20), (0.25, 0.30)), 
 				   ((0.40, 0.45), (0.50, 0.55))]
 s.layers[0] = (0.05, 0.1)
@@ -210,18 +218,19 @@ s.backward()
 s.update_weights()
 s.deltas.clear()
 print(s.weights)
-
+'''
 
 # должны получится веса в тесте
 #[[(0.1497807161327628, 0.19956143226552567), (0.24975114363236958, 0.29950228726473915)], [(0.35891647971788465, 0.4086661860762334), (0.5113012702387375, 0.5613701211079891)]]
 
-'''
+
 
 
 # тренировка на 20к картинках MNIST
 data = open("mnist_train_small.csv", "r").readlines()
 len_data = len(data)
-struct = ((784,), (50,), (20,), (10,))	
+			#N  #bias #f.activ.
+struct = ((784, 0, "sigmoid"), (50,0,"sigmoid"), (20,0,"sigmoid"), (10,0,"sigmoid"))	
 net = SimpleNet(struct)
 
 n_iter = 0 # ставим 0, если сразу хотим тестить
@@ -323,9 +332,10 @@ print("$"*20, "CUSTOM IMAGE TEST", "$"*20)
 import numpy as np
 
 from PIL import Image, ImageOps
-img = Image.open("1129.png").convert("L") # L == black and white
-#img = ImageOps.invert(img)
+img = Image.open("test.png").convert("L") # L == black and white
+#img = ImageOps.invert(img) # раскомментировать, если фон - белый, цифра - чёрная
 #img = ImageMath.abs()
+img = img.resize((28,28), Image.BILINEAR)
 img = np.asarray(img).ravel()/255
 
 '''
