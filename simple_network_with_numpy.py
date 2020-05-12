@@ -1,8 +1,7 @@
 from random import random, choice, shuffle
 import json
-import math
 import numpy as np
-
+np.show_config()
 
 class SimpleNet():
 	
@@ -33,8 +32,9 @@ class SimpleNet():
 		else:	
 			for i in range(self.num_layers-1):
 				#self.weights.append(([[random()/100]*self.neurons_at_layer[i] for _ in range(self.neurons_at_layer[i+1])])) # заполнять рандомными весами		
-				self.weights.append(np.random.random_sample((self.neurons_at_layer[i+1], self.neurons_at_layer[i]))/100) # заполнять рандомными весами		
-		
+				#self.weights.append(np.random.random_sample((self.neurons_at_layer[i+1], self.neurons_at_layer[i]))/100) # заполнять рандомными весами		
+				self.weights.append(np.random.uniform(low=-0.5, high=0.5, size=(self.neurons_at_layer[i+1], self.neurons_at_layer[i]))) # заполнять рандомными весами		
+				# np.random.uniform(low=-0.5, high=0.5, size=(layer[-1], layer[0], layer[1], layer[1]))
 		# вектор правильных ответов
 		self.out_true = ()
 		
@@ -56,12 +56,16 @@ class SimpleNet():
 		
 	# функция активации	
 	def sigmoid(self, x):
-		return 1/(1+math.exp(-x))
-
+		#return 1/(1+math.exp(-x))
+		return 1/(1 + np.exp(-x))
 	
 	def tanh(self, x):
-		return (math.exp(2*x) - 1)/(math.exp(2*x) + 1)
+		#return (math.exp(2*x) - 1)/(math.exp(2*x) + 1)
+		return np.tanh(x)
+
 	
+	def relu(x):
+		return max(0, x)	
 
 	def softmax(self, array):
 		exps = np.exp(array - array.max()) # советуют вычислять так
@@ -73,14 +77,17 @@ class SimpleNet():
 
 		output = [0]*len(array)
 
-		if func_name in ("sigmoid", "tanh"):
+		if func_name in ("sigmoid", "tanh", "relu"):
 			if func_name == "sigmoid":
 				func = self.sigmoid
 			elif func_name == "tanh":
 				func = self.tanh
+			elif func_name == "relu":
+				func = self.relu
 			
-			vfunc = np.vectorize(func)
-			return vfunc(array)
+			#vfunc = np.vectorize(func)
+			#return vfunc(array)
+			return func(array)
 		
 		elif func_name in ("softmax",):
 			func = self.softmax
@@ -117,11 +124,15 @@ class SimpleNet():
 	# производная 
 	def derivative(self, x, func_name="sigmoid"):
 		
-		if func_name in ("sigmoid", "tanh"):
+		if func_name in ("sigmoid", "tanh", "relu"):
 			if func_name == "sigmoid":
 				return x*(1-x)
 			elif func_name == "tanh":
 				return 1 - x**2
+			elif func_name == "relu":
+				return (x > 0).astype(int)
+				#return np.greater(x, 0).astype(int)
+				#return (x > 0) * 1
 				
 		elif func_name in ("softmax",): 
 			# https://aimatters.wordpress.com/2019/06/17/the-softmax-function-derivative/
@@ -142,10 +153,13 @@ class SimpleNet():
 		elif self.structure[-1][2] in ("softmax",):
 			return (self.layers[-1] - self.out_true) @ self.derivative(self.layers[-1], self.structure[-1][2])
 		
-
+		
+	# если что, здесь скрытые слои идут в обратном порядке, при вызове функции стоит шаг -1
 	def calc_hidden_deltas(self, layer_idx):
+		#print(len(self.deltas[0]), "3333333333424521434",  self.weights[layer_idx].shape )
 		first = self.deltas[0] @ self.weights[layer_idx] 
 		second = first * self.derivative(self.layers[layer_idx], self.structure[layer_idx][2])
+		#print(self.layers[layer_idx].shape, "fghjfghjfgjfy", self.deltas[0].shape, self.derivative(self.layers[layer_idx], self.structure[layer_idx][2]))
 		return second
 		
 		
@@ -167,11 +181,13 @@ class SimpleNet():
 	def update_weights(self):
 		for idx, deltas in enumerate(self.deltas):
 			mods = self.alpha * self.calc_modificators(deltas, idx)
+			#print(mods/self.alpha, "mods")
 			self.weights[idx] = self.weights[idx] - mods
 			
 	
 	# обратное распространение ошибки
 	# обычный градиентный спуск
+	# считаем дельты
 	def backward(self):
 		self.deltas.insert(0, self.calc_output_deltas())
 		
@@ -205,56 +221,56 @@ print(s.weights)
 # должны получится веса в тесте
 #[[(0.1497807161327628, 0.19956143226552567), (0.24975114363236958, 0.29950228726473915)], [(0.35891647971788465, 0.4086661860762334), (0.5113012702387375, 0.5613701211079891)]]
 
+if __name__ == "__main__":
+	#'''
+	# тренировка на 20к картинках MNIST
+	data = open("mnist_train_small.csv", "r").readlines()
+	len_data = len(data)
+				#N  #bias #f.activ.
+	struct = ((784, 0, "tanh"), (50, 0,"tanh"), (20, 0,"tanh"), (10, 0, "softmax"))	
 
-#'''
-# тренировка на 20к картинках MNIST
-data = open("mnist_train_small.csv", "r").readlines()
-len_data = len(data)
-			#N  #bias #f.activ.
-struct = ((784, 0, "tanh"), (50, 0,"tanh"), (20, 0,"tanh"), (10, 0, "softmax"))	
+	# загрузка весов
+	weights_file = "weights_tanh_softmax.npz"
 
-# загрузка весов
-weights_file = "weights_tanh_softmax.npz"
+	net = SimpleNet(struct, alpha = 0.05, weights_file=None) # заменить None на weights_file для загрузки готовых весов
 
-net = SimpleNet(struct, alpha = 0.05, weights_file=None) # заменить None на weights_file для загрузки готовых весов
+	mode = "train" # "test"
 
-mode = "train" # "test"
+	n_iter = 2 # ставим 0, если сразу хотим тестить
 
-n_iter = 5 # ставим 0, если сразу хотим тестить
-
-def create_true_vector_mnist(value):
-	output = [0.0 for _ in range(10)]
-	output[value] = 1.00
-	return output
+	def create_true_vector_mnist(value):
+		output = [0.0 for _ in range(10)]
+		output[value] = 1.00
+		return output
 
 
-for iter_idx in range(n_iter):
-	shuffle(data)
-	for idx, row in enumerate(data):
-		out_true = create_true_vector_mnist(int(row[0]))
-		net.out_true = out_true
-		row = row.split(",")
-		inp = np.array([int(s)/255 for s in row[1:]])
-		net.layers[0] = inp
-		
-		errors = net.forward()
-		if mode == "train":
-			net.backward()
-			# обновляем веса	
-			net.update_weights()
-			# очищаем дельты, чтобы потом по-новой записать вычисленные с учётом обновлённых весов
-			net.deltas.clear()
-		
-		if idx%500==0:
-			row = choice(data)
+	for iter_idx in range(n_iter):
+		shuffle(data)
+		for idx, row in enumerate(data):
 			out_true = create_true_vector_mnist(int(row[0]))
 			net.out_true = out_true
 			row = row.split(",")
-			inp = [int(s)/255 for s in row[1:]] 	
+			inp = np.array([int(s)/255 for s in row[1:]]) # нормализация
 			net.layers[0] = inp
-			out = net.forward()
-			print("epoch:", iter_idx, "current_index/data", f"{idx}/{len_data}", "true:", out_true.index(max(out_true)), "prediction:", net.layers[-1].tolist().index(max(net.layers[-1])) )
-			print("error", errors, net.layers[-1])
-#'''
-if mode == "train":
-	np.savez("weights_tanh_softmax", *net.weights	)
+			
+			errors = net.forward()
+			if mode == "train":
+				net.backward()
+				# обновляем веса	
+				net.update_weights()
+				# очищаем дельты, чтобы потом по-новой записать вычисленные с учётом обновлённых весов
+				net.deltas.clear()
+			
+			if idx%500==0:
+				row = choice(data)
+				out_true = create_true_vector_mnist(int(row[0]))
+				net.out_true = out_true
+				row = row.split(",")
+				inp = [int(s)/255 for s in row[1:]] 	
+				net.layers[0] = inp
+				out = net.forward()
+				print("epoch:", iter_idx, "current_index/data", f"{idx}/{len_data}", "true:", out_true.index(max(out_true)), "prediction:", net.layers[-1].tolist().index(max(net.layers[-1])) )
+				print("error", errors, net.layers[-1])
+	#'''
+	if mode == "train":
+		np.savez("weights_tanh_softmax", *net.weights)
